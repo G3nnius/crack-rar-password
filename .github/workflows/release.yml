@@ -29,7 +29,7 @@ jobs:
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --title "RARNinja $TAG" \
-            --notes "Self-contained builds. macOS: the .app (GUI) + CLI. Linux: CLI binary. Backends bundled (unrar on macOS, static 7zz on Linux). First macOS launch: right-click -> Open (unsigned)."
+            --notes "Self-contained builds. macOS: the .app (GUI) + CLI. Linux: GUI binary + CLI (x64 and arm64). Backends bundled (unrar on macOS, static 7zz on Linux). Linux GUI: chmod +x then run (needs a desktop/X11). First macOS launch: right-click -> Open (unsigned)."
 
   macos-arm64:
     needs: create-release
@@ -76,10 +76,29 @@ jobs:
           pyinstaller --onefile --name rarninja --optimize 2 --strip \
             --add-binary "bin/linux-x64/7zz:bin/linux-x64" --console RARNinja.py
           mv dist/rarninja rarninja-linux-x64
+      - name: Build GUI (Ubuntu container, verified under xvfb)
+        run: |
+          docker run --rm --platform linux/amd64 -v "$PWD":/src -w /src ubuntu:22.04 bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip python3-tk \
+              binutils file xvfb libx11-6 libxext6 libxrender1 libxft2 ca-certificates
+            pip3 install --no-cache-dir pyinstaller
+            chmod +x bin/linux-x64/7zz
+            python3 -c "import tkinter; print(\"tk\", tkinter.TkVersion)"
+            pyinstaller --onefile --name rarninja-gui --optimize 2 --strip \
+              --add-binary "bin/linux-x64/7zz:bin/linux-x64" \
+              --add-data "assets/icon_1024.png:assets" gui.py
+            xvfb-run -a ./dist/rarninja-gui --selftest tests/fixtures/locked.rar tests/fixtures/words.txt
+            mv dist/rarninja-gui /src/rarninja-gui-linux-x64
+          '
       - name: Upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" rarninja-linux-x64 --repo "$GITHUB_REPOSITORY" --clobber
+        run: |
+          gh release upload "$TAG" rarninja-linux-x64 rarninja-gui-linux-x64 \
+            --repo "$GITHUB_REPOSITORY" --clobber
 
   linux-arm64:
     needs: create-release
@@ -88,19 +107,30 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
         with: { platforms: arm64 }
-      - name: Build CLI (arm64 via QEMU)
+      - name: Build CLI + GUI (arm64 Ubuntu container via QEMU, GUI verified under xvfb)
         run: |
-          docker run --rm --platform linux/arm64 -v "$PWD":/src -w /src python:3.11-slim bash -c '
+          docker run --rm --platform linux/arm64 -v "$PWD":/src -w /src ubuntu:22.04 bash -c '
             set -e
-            apt-get update && apt-get install -y --no-install-recommends binutils file
-            pip install --no-cache-dir pyinstaller
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip python3-tk \
+              binutils file xvfb libx11-6 libxext6 libxrender1 libxft2 ca-certificates
+            pip3 install --no-cache-dir pyinstaller
             chmod +x bin/linux-arm64/7zz
-            python tests/test_rarninja.py
+            python3 -c "import tkinter; print(\"tk\", tkinter.TkVersion)"
+            python3 tests/test_rarninja.py
             pyinstaller --onefile --name rarninja --optimize 2 --strip \
               --add-binary "bin/linux-arm64/7zz:bin/linux-arm64" --console RARNinja.py
             mv dist/rarninja /src/rarninja-linux-arm64
+            pyinstaller --onefile --name rarninja-gui --optimize 2 --strip \
+              --add-binary "bin/linux-arm64/7zz:bin/linux-arm64" \
+              --add-data "assets/icon_1024.png:assets" gui.py
+            xvfb-run -a ./dist/rarninja-gui --selftest tests/fixtures/locked.rar tests/fixtures/words.txt
+            mv dist/rarninja-gui /src/rarninja-gui-linux-arm64
           '
       - name: Upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" rarninja-linux-arm64 --repo "$GITHUB_REPOSITORY" --clobber
+        run: |
+          gh release upload "$TAG" rarninja-linux-arm64 rarninja-gui-linux-arm64 \
+            --repo "$GITHUB_REPOSITORY" --clobber
