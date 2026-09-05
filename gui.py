@@ -477,9 +477,43 @@ def _selftest(rar, words):
     return "Password:" in txt
 
 
+def _prep(step="archive", rar=None):
+    """Open the window already advanced to a given step, for screenshotting."""
+    here = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    rar = rar or os.path.join(here, "tests", "fixtures", "locked.rar")
+    root = tk.Tk()
+    try:
+        root.geometry("+0+0")
+    except tk.TclError:
+        pass
+    app = RARNinjaGUI(root)
+    words = os.path.join(here, "tests", "fixtures", "words.txt")
+    if step in ("resources", "dict", "gen", "run", "result") and os.path.isfile(rar):
+        app.rar = rar; app._refresh_nav(); app._next()          # -> resources
+    if step in ("dict", "gen", "run", "result"):
+        app._next()                                             # -> dictionary
+    if step == "gen":
+        app.mode.set("generate"); app._on_mode()
+        app.charset_box.current(0); app.min_len.set(1); app.max_len.set(4)
+        app._on_gen_change()
+    elif step in ("dict", "run", "result"):
+        app.words = words if os.path.isfile(words) else rar
+        app.words_lbl.config(text=short(app.words)); app._refresh_nav()
+    if step in ("run", "result"):
+        app._next()                                             # -> run
+    if step == "result":
+        app.extract.set(False); app._start()                   # crack and show result
+    root.update()
+    root.mainloop()
+
+
 if __name__ == "__main__":
     import multiprocessing as mp
     mp.freeze_support()
     if len(sys.argv) >= 4 and sys.argv[1] == "--selftest":
         sys.exit(0 if _selftest(sys.argv[2], sys.argv[3]) else 1)
+    if len(sys.argv) >= 2 and sys.argv[1] == "--prep":
+        _prep(sys.argv[2] if len(sys.argv) > 2 else "archive",
+              sys.argv[3] if len(sys.argv) > 3 else None)
+        sys.exit(0)
     main()

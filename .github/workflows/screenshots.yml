@@ -1,0 +1,39 @@
+name: screenshots
+
+# Render the GUI under a virtual display (Xvfb) and capture real PNGs of the
+# wizard, uploaded as a build artifact. Manually triggered.
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 python3-tk xvfb imagemagick x11-apps
+          chmod +x bin/linux-x64/7zz
+      - name: Capture wizard screens
+        run: |
+          mkdir -p assets/screenshots
+          shoot () {   # $1 = prep step, $2 = output name, $3 = settle seconds
+            xvfb-run -a --server-args="-screen 0 1100x900x24" bash -c "
+              python3 gui.py --prep $1 tests/fixtures/locked.rar &
+              APP=\$!
+              sleep ${3:-5}
+              import -window root /tmp/raw.png
+              convert /tmp/raw.png -trim +repage -bordercolor '#e2e4e8' -border 1 assets/screenshots/$2.png
+              kill \$APP 2>/dev/null || true
+            "
+            echo "wrote assets/screenshots/$2.png"; ls -l assets/screenshots/$2.png
+          }
+          shoot archive wizard-1-archive 5
+          shoot gen     wizard-3-generator 5
+          shoot result  wizard-4-result 9
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: assets/screenshots/*.png
