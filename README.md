@@ -13,6 +13,12 @@ instant it finds the password.
 ![Backend](https://img.shields.io/badge/backend-unrar%20%7C%207z-orange)
 ![Arch](https://img.shields.io/badge/Apple%20Silicon-arm64-000000?logo=apple&logoColor=white)
 
+### [⬇︎ Download the macOS app](https://github.com/G3nnius/crack-rar-password/releases/latest)
+
+No Python, no setup — grab `RARNinja-macos-arm64.zip` from the latest release,
+unzip, and open. (First launch: right-click the app → **Open**, since it isn't
+notarized. See [Troubleshooting](#troubleshooting).)
+
 </div>
 
 ---
@@ -29,12 +35,14 @@ instant it finds the password.
 
 ## Table of Contents
 
+- [Download](#download)
 - [Why this fork](#why-this-fork)
 - [Features](#features)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Desktop app (GUI)](#desktop-app-gui)
 - [Options](#options)
 - [Examples](#examples)
 - [Performance](#performance)
@@ -44,6 +52,19 @@ instant it finds the password.
 - [Troubleshooting](#troubleshooting)
 - [Responsible use](#responsible-use)
 - [Credits](#credits)
+
+## Download
+
+**Easiest — the desktop app:** download `RARNinja-macos-arm64.zip` from the
+[latest release](https://github.com/G3nnius/crack-rar-password/releases/latest),
+unzip, and double-click `RARNinja.app`. It bundles everything (including the
+`unrar` backend) — no Python required.
+
+**Terminal fan?** The same release ships a standalone CLI binary, `rarninja`.
+
+> First launch is blocked by Gatekeeper because the app isn't notarized.
+> Right-click the app and choose **Open** once (then it's trusted), or run
+> `xattr -dr com.apple.quarantine RARNinja.app`.
 
 ## Why this fork
 
@@ -64,6 +85,7 @@ Silicon)** and using the machine to its full potential.
 
 ## Features
 
+- 🖥️ **Native macOS desktop app** — a light Tk GUI: pick an archive, pick a wordlist, click Start.
 - ⚡ **All-core process pool** — one worker per logical CPU by default.
 - 🛑 **Instant early-stop** — a shared event halts every worker the moment one succeeds.
 - 🔍 **Test, don't extract** — each candidate is verified with `unrar t`; only the winning password triggers a real extraction.
@@ -136,6 +158,22 @@ python3 RARNinja.py
 
 On success the archive is extracted into `./Extracted/`.
 
+## Desktop app (GUI)
+
+Prefer buttons to flags? Launch the app (or run `python3 gui.py` from source):
+
+1. **Select Archive…** — choose the encrypted `.rar`.
+2. **Select Wordlist…** — choose your dictionary file.
+3. Adjust **Workers** if you like (defaults to every core) and toggle
+   **Extract on success**.
+4. Hit **Start Cracking**. Live progress shows tries and rate; **Stop** cancels
+   at any time. On success the password is shown and the archive is extracted to
+   an `Extracted/` folder next to it.
+
+The GUI is pure standard-library `tkinter` — no extra dependencies — and runs the
+same all-core engine as the CLI on a background thread, so the window stays
+responsive.
+
 ## Options
 
 ```
@@ -202,16 +240,22 @@ is intentionally CPU-heavy.
 
 ## Compiled binary (macOS arm64)
 
-Build a single, optimized, self-contained executable that bundles `unrar` and
-needs no Python installed:
+One script builds everything — self-contained, optimized, and needing no Python:
 
 ```bash
-./scripts/build.sh          # → dist/rarninja
-./dist/rarninja secret.rar rockyou.txt
+./scripts/build.sh
 ```
 
-The script creates a throwaway virtualenv, installs PyInstaller, and produces a
-stripped, `--optimize 2` onefile arm64 build.
+Produces:
+
+| Artifact | What it is |
+|---|---|
+| `dist/app/RARNinja.app` | the desktop GUI application |
+| `dist/RARNinja-macos-arm64.zip` | that app, zipped for a release |
+| `dist/rarninja` | the standalone CLI binary |
+
+The script spins up a throwaway virtualenv, installs PyInstaller, and produces
+`--optimize 2`, arm64 builds with `unrar` bundled inside each.
 
 ## Testing
 
@@ -227,7 +271,8 @@ extraction paths.
 
 ```
 .
-├── RARNinja.py            # the tool (single file, stdlib only)
+├── RARNinja.py            # the engine + CLI (single file, stdlib only)
+├── gui.py                 # the desktop GUI (tkinter, stdlib only)
 ├── bin/
 │   ├── unrar              # RARLAB unrar 7.12, arm64 (bundled backend)
 │   ├── rar                # RARLAB rar 7.12, arm64 (used to build fixtures)

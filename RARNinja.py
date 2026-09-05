@@ -130,7 +130,13 @@ def candidates(path):
 # Crack driver
 # ---------------------------------------------------------------------------
 
-def crack(rar, wordlist, tool, family, workers, progress=True):
+def crack(rar, wordlist, tool, family, workers, progress=True,
+          on_progress=None, cancel=None):
+    """Return (password_or_None, tried, elapsed).
+
+    on_progress(tried, rate, elapsed): optional callback (e.g. for a GUI).
+    cancel: optional threading.Event; setting it stops the run early.
+    """
     found = mp.Manager().Event()
     tried = 0
     hit = None
@@ -144,17 +150,22 @@ def crack(rar, wordlist, tool, family, workers, progress=True):
             if result is not None:
                 hit = result
                 break
-            if progress and IS_TTY:
-                now = time.time()
-                if now - last >= 0.25:
-                    rate = tried / (now - start) if now > start else 0
+            if cancel is not None and cancel.is_set():
+                found.set()
+                break
+            now = time.time()
+            if now - last >= 0.25:
+                rate = tried / (now - start) if now > start else 0
+                if on_progress is not None:
+                    on_progress(tried, rate, now - start)
+                elif progress and IS_TTY:
                     print(f"\r  tried {tried:,}  ({rate:,.0f}/sec)   ", end="", flush=True)
-                    last = now
+                last = now
     finally:
         pool.terminate()
         pool.join()
 
-    if progress and IS_TTY:
+    if on_progress is None and progress and IS_TTY:
         print("\r" + " " * 48 + "\r", end="", flush=True)
     return hit, tried, time.time() - start
 
