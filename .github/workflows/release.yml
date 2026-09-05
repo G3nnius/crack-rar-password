@@ -82,7 +82,7 @@ jobs:
             set -e
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python3-tk \
+            apt-get install -y --no-install-recommends python3 python3-pip python3-tk libpython3.10 \
               binutils file xvfb libx11-6 libxext6 libxrender1 libxft2 ca-certificates
             pip3 install --no-cache-dir pyinstaller
             chmod +x bin/linux-x64/7zz
@@ -113,7 +113,7 @@ jobs:
             set -e
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python3-tk \
+            apt-get install -y --no-install-recommends python3 python3-pip python3-tk libpython3.10 \
               binutils file xvfb libx11-6 libxext6 libxrender1 libxft2 ca-certificates
             pip3 install --no-cache-dir pyinstaller
             chmod +x bin/linux-arm64/7zz
