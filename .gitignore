@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Build artifacts
+build/
+dist/
+.buildvenv/
+*.spec
+
+# Runtime output
+Extracted/
+
+# Local tooling / session state
+.claude-flow/
+
+# Test target (large / not ours) — bring your own RAR to crack
+test.rar
+
+# macOS
+.DS_Store

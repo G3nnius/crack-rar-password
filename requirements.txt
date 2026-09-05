@@ -1,0 +1,8 @@
+# RARNinja runtime: standard library only — nothing to install.
+#
+# You only need a RAR backend on PATH, or use the arm64 `unrar` shipped in bin/
+# (this repo bundles RARLAB unrar 7.12 for Apple Silicon). Alternatives that are
+# auto-detected: 7zz, 7z.
+#
+# Optional, only to compile the standalone binary (see scripts/build.sh):
+#   pyinstaller
