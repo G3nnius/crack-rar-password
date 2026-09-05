@@ -64,7 +64,9 @@ is nothing else to install.
 |---|---|---|
 | macOS (Apple Silicon) | `RARNinja-macos-arm64.zip` | the **desktop app** (GUI) |
 | macOS (Apple Silicon) | `rarninja-macos-arm64` | CLI binary |
+| Linux x86-64 | `rarninja-gui-linux-x64` | **desktop app** (GUI) |
 | Linux x86-64 | `rarninja-linux-x64` | CLI binary |
+| Linux arm64 | `rarninja-gui-linux-arm64` | **desktop app** (GUI) |
 | Linux arm64 | `rarninja-linux-arm64` | CLI binary |
 
 **macOS app:** unzip and double-click `RARNinja.app`. First launch is blocked by
@@ -72,8 +74,9 @@ Gatekeeper because the app isn't notarized — right-click the app and choose
 **Open** once (then it's trusted), or run
 `xattr -dr com.apple.quarantine RARNinja.app`.
 
-**Linux CLI:** `chmod +x rarninja-linux-*` and run it. The desktop GUI runs on
-Linux too, from source (`python3 gui.py`, needs `python3-tk`).
+**Linux app (GUI):** `chmod +x rarninja-gui-linux-*` then run it (needs a
+desktop session / X11 — most file managers also let you double-click it). The
+`rarninja-linux-*` files are the terminal CLI equivalent.
 
 > Builds are produced by GitHub Actions on native runners
 > ([`.github/workflows/release.yml`](.github/workflows/release.yml)); pushing a

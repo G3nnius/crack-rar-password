@@ -449,7 +449,37 @@ def main():
     root.mainloop()
 
 
+def _selftest(rar, words):
+    """Headlessly drive the wizard against a fixture; return True if it cracks.
+
+    Used by CI (under xvfb) to prove the FROZEN GUI actually runs on the target.
+    """
+    import time
+    root = tk.Tk(); root.withdraw()
+    app = RARNinjaGUI(root)
+    if not app.tool:
+        print("selftest: no backend found"); return False
+    app.rar = rar; app._refresh_nav(); app._next()      # -> resources
+    app.workers.set(2); app._next()                      # -> dictionary
+    app.mode.set("file"); app._on_mode()
+    app.words = words; app._refresh_nav(); app._next()   # -> run
+    app.extract.set(False)
+    app._start()
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        root.update()
+        if str(app.new_btn["state"]) == "normal":
+            break
+        time.sleep(0.03)
+    txt = app.result.cget("text")
+    print("selftest result:", txt)
+    root.destroy()
+    return "Password:" in txt
+
+
 if __name__ == "__main__":
     import multiprocessing as mp
     mp.freeze_support()
+    if len(sys.argv) >= 4 and sys.argv[1] == "--selftest":
+        sys.exit(0 if _selftest(sys.argv[2], sys.argv[3]) else 1)
     main()
