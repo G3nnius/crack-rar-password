@@ -98,7 +98,9 @@ Silicon)** and using the machine to its full potential.
 
 ## Features
 
-- 🖥️ **Native macOS desktop app** — a light Tk GUI: pick an archive, pick a wordlist, click Start.
+- 🖥️ **Native desktop app** — a light, wizard-style GUI: archive → resources → dictionary → run.
+- 🧰 **Built-in dictionary generator** — no wordlist? Generate one by charset + length, with a live size/time estimate.
+- 🗂️ **Password history** — every recovered password is saved and browsable in-app.
 - ⚡ **All-core process pool** — one worker per logical CPU by default.
 - 🛑 **Instant early-stop** — a shared event halts every worker the moment one succeeds.
 - 🔍 **Test, don't extract** — each candidate is verified with `unrar t`; only the winning password triggers a real extraction.
@@ -174,19 +176,23 @@ On success the archive is extracted into `./Extracted/`.
 
 ## Desktop app (GUI)
 
-Prefer buttons to flags? Launch the app (or run `python3 gui.py` from source):
+The app is a four-step wizard (run the built app, or `python3 gui.py` from source):
 
-1. **Select Archive…** — choose the encrypted `.rar`.
-2. **Select Wordlist…** — choose your dictionary file.
-3. Adjust **Workers** if you like (defaults to every core) and toggle
-   **Extract on success**.
-4. Hit **Start Cracking**. Live progress shows tries and rate; **Stop** cancels
-   at any time. On success the password is shown and the archive is extracted to
-   an `Extracted/` folder next to it.
+1. **Archive** — click **Select Archive…** and choose the encrypted `.rar`.
+2. **Resources** — a slider picks how many of your CPU cores to use (all of them
+   by default; dial it back to keep the machine responsive).
+3. **Dictionary** — either **I have a wordlist** (pick a file) or **Generate one
+   for me**: choose a complexity (digits → letters+digits+symbols) and a length
+   range. A live estimate shows the candidate count and a rough time to exhaust,
+   and warns when the space is impractically large.
+4. **Run** — review the summary, hit **Start Cracking**, and watch the progress
+   bar and live tries/sec. On success the password is shown and saved to history
+   (and the archive extracted next to it); otherwise you get a clear
+   "not found". **Stop** cancels mid-run.
 
-The GUI is pure standard-library `tkinter` — no extra dependencies — and runs the
-same all-core engine as the CLI on a background thread, so the window stays
-responsive.
+Click **History** any time to see previously recovered passwords. The GUI is pure
+standard-library `tkinter` and runs the same all-core engine on a background
+thread, so the window stays responsive.
 
 ## Options
 
@@ -201,8 +207,20 @@ options:
   --extract-dir DIR    extraction target on success(default: ./Extracted)
   --no-extract         report the password only, skip extraction
   -q, --quiet          suppress the live progress line
+  --history            print recovered-password history and exit
   -h, --help           show help
+
+generator (use instead of a wordlist file):
+  --generate           brute-force candidates instead of reading a wordlist
+  --charset SET        digits | lower | lower+digits | alnum | alnum+symbols
+  --min-len N          minimum length (default 1)
+  --max-len N          maximum length (default 4)
+  --save-wordlist FILE also write the generated candidates to a file
 ```
+
+Recovered passwords are appended to a history file
+(`~/Library/Application Support/RARNinja/history.jsonl` on macOS,
+`~/.local/share/RARNinja/` on Linux); view it with `--history` or the GUI.
 
 ## Examples
 
@@ -218,6 +236,12 @@ python3 RARNinja.py secret.rar rockyou.txt -w 4 -t 7zz
 
 # Extract somewhere else
 python3 RARNinja.py secret.rar words.txt --extract-dir ~/loot
+
+# No wordlist? Generate 1-6 digit PINs and try them
+python3 RARNinja.py secret.rar --generate --charset digits --min-len 1 --max-len 6
+
+# See previously recovered passwords
+python3 RARNinja.py --history
 ```
 
 Sample run:
@@ -277,9 +301,10 @@ The script spins up a throwaway virtualenv, installs PyInstaller, and produces
 python3 tests/test_rarninja.py
 ```
 
-The suite cracks a committed, header-encrypted fixture
-(`tests/fixtures/locked.rar`, password `hunter2`) and verifies the not-found and
-extraction paths.
+The suite cracks committed encrypted fixtures (`locked.rar` → `hunter2`,
+`digits.rar` → `42`) and covers the not-found path, extraction, the dictionary
+generator (count, streaming, generator-driven crack), the iterable source, and
+the history store.
 
 ## Project structure
 
@@ -293,8 +318,12 @@ extraction paths.
 │   └── linux-arm64/       # static 7zz (7-Zip)
 ├── .github/workflows/
 │   └── release.yml        # builds + uploads all targets on a v* tag
+├── assets/
+│   ├── RARNinja.icns      # app icon
+│   └── icon_1024.png
 ├── scripts/
-│   └── build.sh           # compile the standalone arm64 binary
+│   ├── build.sh           # compile app + CLI
+│   └── make_icon.py       # generate the icon (pure stdlib)
 ├── tests/
 │   ├── test_rarninja.py
 │   └── fixtures/          # locked.rar + words.txt

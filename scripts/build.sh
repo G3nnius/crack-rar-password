@@ -25,10 +25,13 @@ mkdir -p dist
   RARNinja.py
 
 # --- GUI .app -----------------------------------------------------------
+[ -f assets/RARNinja.icns ] || python3 scripts/make_icon.py
 .buildvenv/bin/pyinstaller \
   --windowed --name RARNinja --distpath dist/app \
   --target-arch arm64 --optimize 2 \
+  --icon assets/RARNinja.icns \
   --add-binary "bin/macos-arm64/unrar:bin/macos-arm64" \
+  --add-data "assets/icon_1024.png:assets" \
   gui.py
 
 cp dist/cli/rarninja dist/rarninja
