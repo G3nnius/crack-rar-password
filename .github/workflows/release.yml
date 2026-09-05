@@ -52,7 +52,12 @@ jobs:
             --target-arch arm64 --optimize 2 --icon assets/RARNinja.icns \
             --add-binary "bin/macos-arm64/unrar:bin/macos-arm64" \
             --add-data "assets/icon_1024.png:assets" gui.py
-          ditto -c -k --keepParent dist/app/RARNinja.app RARNinja-macos-arm64.zip
+          mkdir -p pkg/RARNinja
+          mv dist/app/RARNinja.app "pkg/RARNinja/RARNinja.app"
+          cp "scripts/Start RARNinja.command" "pkg/RARNinja/Start RARNinja.command"
+          cp FIRST-RUN.txt "pkg/RARNinja/FIRST-RUN.txt"
+          chmod +x "pkg/RARNinja/Start RARNinja.command"
+          ditto -c -k --keepParent pkg/RARNinja RARNinja-macos-arm64.zip
           mv dist/cli/rarninja rarninja-macos-arm64
       - name: Upload
         env:

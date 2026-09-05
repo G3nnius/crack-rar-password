@@ -36,9 +36,14 @@ mkdir -p dist
 
 cp dist/cli/rarninja dist/rarninja
 
-# --- zip the app for distribution ---------------------------------------
+# --- zip the app (+ easy-start launcher + first-run guide) --------------
 if [ -d dist/app/RARNinja.app ]; then
-  ( cd dist/app && ditto -c -k --keepParent RARNinja.app ../RARNinja-macos-arm64.zip )
+  rm -rf dist/pkg && mkdir -p dist/pkg/RARNinja
+  cp -R dist/app/RARNinja.app "dist/pkg/RARNinja/RARNinja.app"
+  cp "scripts/Start RARNinja.command" "dist/pkg/RARNinja/Start RARNinja.command"
+  cp FIRST-RUN.txt "dist/pkg/RARNinja/FIRST-RUN.txt"
+  chmod +x "dist/pkg/RARNinja/Start RARNinja.command"
+  ( cd dist/pkg && ditto -c -k --keepParent RARNinja ../RARNinja-macos-arm64.zip )
 fi
 
 echo

@@ -1,0 +1,32 @@
+RARNinja - First Run
+====================
+
+macOS (Apple Silicon)
+---------------------
+The app is not code-signed by Apple, so the very first launch needs one click.
+
+Easiest:
+  1) Right-click "Start RARNinja.command"  ->  Open  ->  Open.
+     It clears the quarantine flag and launches the app. Do this once.
+  2) After that, open RARNinja.app normally (double-click).
+
+Or, in Terminal:
+  xattr -dr com.apple.quarantine "RARNinja.app"
+  open "RARNinja.app"
+
+Linux
+-----
+  chmod +x rarninja-gui-linux-x64     # or rarninja-gui-linux-arm64
+  ./rarninja-gui-linux-x64
+Needs a desktop session (X11). The rarninja-linux-* files are the terminal CLI.
+
+How to use (both platforms)
+---------------------------
+  1. Select Archive  - choose your password-protected .rar
+  2. Resources       - how many CPU cores to use (all by default)
+  3. Dictionary      - pick a wordlist, OR Generate one (complexity + length)
+  4. Start           - live progress; on success the password is shown and saved
+                       to History and the archive is extracted next to it,
+                       otherwise you get a clear "not found".
+
+Only use RARNinja on archives you own or are authorized to open.

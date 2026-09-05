@@ -33,9 +33,21 @@ notarized. See [Troubleshooting](#troubleshooting).)
              || RARNinja: The RAR Password Cracking Utility ||
 ```
 
+## Screenshots
+
+<div align="center">
+
+| Select the archive | Generate a dictionary | Cracked & saved |
+|:--:|:--:|:--:|
+| ![Step 1: select archive](assets/screenshots/wizard-1-archive.png) | ![Step 3: generate a dictionary](assets/screenshots/wizard-3-generator.png) | ![Step 4: password found](assets/screenshots/wizard-4-result.png) |
+
+</div>
+
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [Download](#download)
+- [First run](#first-run)
 - [Why this fork](#why-this-fork)
 - [Features](#features)
 - [How it works](#how-it-works)
@@ -69,10 +81,9 @@ is nothing else to install.
 | Linux arm64 | `rarninja-gui-linux-arm64` | **desktop app** (GUI) |
 | Linux arm64 | `rarninja-linux-arm64` | CLI binary |
 
-**macOS app:** unzip and double-click `RARNinja.app`. First launch is blocked by
-Gatekeeper because the app isn't notarized — right-click the app and choose
-**Open** once (then it's trusted), or run
-`xattr -dr com.apple.quarantine RARNinja.app`.
+**macOS app:** unzip, then for the first launch right-click **`Start RARNinja.command`**
+→ **Open** (it clears Gatekeeper's quarantine and opens the app). After that,
+`RARNinja.app` opens on a normal double-click. See [First run](#first-run).
 
 **Linux app (GUI):** `chmod +x rarninja-gui-linux-*` then run it (needs a
 desktop session / X11 — most file managers also let you double-click it). The
@@ -81,6 +92,28 @@ desktop session / X11 — most file managers also let you double-click it). The
 > Builds are produced by GitHub Actions on native runners
 > ([`.github/workflows/release.yml`](.github/workflows/release.yml)); pushing a
 > `v*` tag cuts a new release with all four assets.
+
+## First run
+
+**macOS.** The app isn't code-signed by Apple, so the first launch needs one
+click. The download unzips to a `RARNinja` folder containing the app plus a
+helper:
+
+- **Easiest:** right-click **`Start RARNinja.command`** → **Open** → **Open**.
+  It clears the quarantine flag and launches the app; do this once, then open
+  `RARNinja.app` normally.
+- **Or in Terminal:**
+  ```bash
+  xattr -dr com.apple.quarantine RARNinja.app && open RARNinja.app
+  ```
+
+**Linux.** Make it executable and run it (needs a desktop session / X11):
+```bash
+chmod +x rarninja-gui-linux-x64   # or rarninja-gui-linux-arm64
+./rarninja-gui-linux-x64
+```
+
+Every download also includes a `FIRST-RUN.txt` with these steps.
 
 ## Why this fork
 
