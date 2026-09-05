@@ -21,6 +21,7 @@ dependency-free and Good Enough for dictionary attacks.
 import argparse
 import multiprocessing as mp
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -50,22 +51,41 @@ BANNER = _c(r"""
 # Backend detection
 # ---------------------------------------------------------------------------
 
+def _vendor_subdir():
+    """bin/ subdirectory holding the backend for the current platform, or None."""
+    arm = platform.machine().lower() in ("arm64", "aarch64")
+    if sys.platform == "darwin":
+        return "macos-arm64" if arm else "macos-x64"
+    if sys.platform.startswith("linux"):
+        return "linux-arm64" if arm else "linux-x64"
+    if os.name == "nt":
+        return "windows-x64"
+    return None
+
+
 def detect_backend(explicit=None):
-    """Return (tool_path, family). family is 'unrar' or '7z'."""
+    """Return (tool_path, family). family is 'unrar' or '7z'.
+
+    Only a vendored binary matching THIS platform is ever considered, so a
+    macOS build never tries to exec a Linux binary (or vice-versa); anything
+    on PATH is the fallback.
+    """
+    names = ["unrar", "7zz", "7z"]
+    if os.name == "nt":
+        names = ["unrar.exe"] + names
     candidates = []
     if explicit:
         candidates.append(explicit)
-    # Prefer the binary we vendored next to this script.
-    exe = "unrar.exe" if os.name == "nt" else "unrar"
-    candidates.append(os.path.join(HERE, "bin", exe))
-    candidates += ["unrar", "7zz", "7z"]
+    sub = _vendor_subdir()
+    if sub:
+        candidates += [os.path.join(HERE, "bin", sub, n) for n in names]
+    candidates += names  # PATH fallback
 
     for c in candidates:
         path = c if os.path.isfile(c) else shutil.which(c)
         if not path:
             continue
-        base = os.path.basename(path).lower()
-        family = "7z" if base.startswith("7z") else "unrar"
+        family = "7z" if os.path.basename(path).lower().startswith("7z") else "unrar"
         return path, family
     return None, None
 

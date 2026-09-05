@@ -20,7 +20,7 @@ mkdir -p dist
 .buildvenv/bin/pyinstaller \
   --onefile --name rarninja --distpath dist/cli \
   --target-arch arm64 --optimize 2 --strip \
-  --add-binary "bin/unrar:bin" \
+  --add-binary "bin/macos-arm64/unrar:bin/macos-arm64" \
   --console \
   RARNinja.py
 
@@ -28,7 +28,7 @@ mkdir -p dist
 .buildvenv/bin/pyinstaller \
   --windowed --name RARNinja --distpath dist/app \
   --target-arch arm64 --optimize 2 \
-  --add-binary "bin/unrar:bin" \
+  --add-binary "bin/macos-arm64/unrar:bin/macos-arm64" \
   gui.py
 
 cp dist/cli/rarninja dist/rarninja

@@ -55,16 +55,29 @@ notarized. See [Troubleshooting](#troubleshooting).)
 
 ## Download
 
-**Easiest — the desktop app:** download `RARNinja-macos-arm64.zip` from the
-[latest release](https://github.com/G3nnius/crack-rar-password/releases/latest),
-unzip, and double-click `RARNinja.app`. It bundles everything (including the
-`unrar` backend) — no Python required.
+Grab a build from the
+[latest release](https://github.com/G3nnius/crack-rar-password/releases/latest).
+Every artifact is self-contained — the RAR backend is bundled inside, so there
+is nothing else to install.
 
-**Terminal fan?** The same release ships a standalone CLI binary, `rarninja`.
+| Platform | Asset | What you get |
+|---|---|---|
+| macOS (Apple Silicon) | `RARNinja-macos-arm64.zip` | the **desktop app** (GUI) |
+| macOS (Apple Silicon) | `rarninja-macos-arm64` | CLI binary |
+| Linux x86-64 | `rarninja-linux-x64` | CLI binary |
+| Linux arm64 | `rarninja-linux-arm64` | CLI binary |
 
-> First launch is blocked by Gatekeeper because the app isn't notarized.
-> Right-click the app and choose **Open** once (then it's trusted), or run
-> `xattr -dr com.apple.quarantine RARNinja.app`.
+**macOS app:** unzip and double-click `RARNinja.app`. First launch is blocked by
+Gatekeeper because the app isn't notarized — right-click the app and choose
+**Open** once (then it's trusted), or run
+`xattr -dr com.apple.quarantine RARNinja.app`.
+
+**Linux CLI:** `chmod +x rarninja-linux-*` and run it. The desktop GUI runs on
+Linux too, from source (`python3 gui.py`, needs `python3-tk`).
+
+> Builds are produced by GitHub Actions on native runners
+> ([`.github/workflows/release.yml`](.github/workflows/release.yml)); pushing a
+> `v*` tag cuts a new release with all four assets.
 
 ## Why this fork
 
@@ -81,7 +94,7 @@ Silicon)** and using the machine to its full potential.
 | Wordlist | Loaded fully into RAM | Streamed line by line |
 | Dependencies | `rarfile`, `colorama`, `termcolor` | **None** (standard library) |
 | Interface | Interactive prompts only | CLI **and** interactive |
-| Distribution | Scripts | Optional self-contained arm64 binary |
+| Distribution | Scripts | Desktop app + self-contained binaries (macOS, Linux) |
 
 ## Features
 
@@ -89,7 +102,7 @@ Silicon)** and using the machine to its full potential.
 - ⚡ **All-core process pool** — one worker per logical CPU by default.
 - 🛑 **Instant early-stop** — a shared event halts every worker the moment one succeeds.
 - 🔍 **Test, don't extract** — each candidate is verified with `unrar t`; only the winning password triggers a real extraction.
-- 🧱 **Backend auto-detection** — prefers the bundled arm64 `unrar`, then `unrar`, `7zz`, or `7z` on your `PATH`.
+- 🧱 **Per-platform backend auto-detection** — uses the bundled binary for your OS/arch, else `unrar`, `7zz`, or `7z` on your `PATH`.
 - 🪶 **Zero dependencies** — pure Python standard library.
 - 📦 **Streamed wordlist** — constant memory, even for multi-GB dictionaries.
 - 🧪 **Tested** — ships with a self-check suite and an encrypted fixture.
@@ -118,9 +131,10 @@ flowchart LR
 ## Requirements
 
 - **Python 3.8+** (uses only the standard library), *or* the [compiled binary](#compiled-binary-macos-arm64) which needs nothing.
-- A **RAR backend**. This repo bundles RARLAB `unrar` 7.12 for Apple Silicon in
-  [`bin/`](bin), so on an M-series Mac you need nothing else. On other systems,
-  install any of `unrar`, `7zz`, or `7z`.
+- A **RAR backend**, auto-detected per platform. This repo vendors one for each
+  target under [`bin/`](bin) — `unrar` (macOS arm64) and static `7zz`
+  (Linux x64 / arm64) — so the released binaries need nothing else. Running from
+  source on another platform falls back to any `unrar`, `7zz`, or `7z` on `PATH`.
 
 ## Installation
 
@@ -209,7 +223,7 @@ python3 RARNinja.py secret.rar words.txt --extract-dir ~/loot
 Sample run:
 
 ```
-Backend: bin/unrar  (unrar)   Workers: 11
+Backend: bin/macos-arm64/unrar  (unrar)   Workers: 11
 Working...
   PASSWORD FOUND: hunter2
   1,842 tries in 5.87s  (~314/sec)
@@ -273,10 +287,12 @@ extraction paths.
 .
 ├── RARNinja.py            # the engine + CLI (single file, stdlib only)
 ├── gui.py                 # the desktop GUI (tkinter, stdlib only)
-├── bin/
-│   ├── unrar              # RARLAB unrar 7.12, arm64 (bundled backend)
-│   ├── rar                # RARLAB rar 7.12, arm64 (used to build fixtures)
-│   └── RARLAB-license.txt
+├── bin/                   # per-platform vendored backends
+│   ├── macos-arm64/       # unrar + rar (RARLAB)
+│   ├── linux-x64/         # static 7zz (7-Zip)
+│   └── linux-arm64/       # static 7zz (7-Zip)
+├── .github/workflows/
+│   └── release.yml        # builds + uploads all targets on a v* tag
 ├── scripts/
 │   └── build.sh           # compile the standalone arm64 binary
 ├── tests/
@@ -289,10 +305,11 @@ extraction paths.
 ## Troubleshooting
 
 - **"No RAR backend found."** Install `unrar`, `7zz`, or `7z`, or pass one with
-  `-t /path/to/tool`. On Apple Silicon the bundled `bin/unrar` is used
-  automatically.
-- **macOS blocks `bin/unrar` ("cannot be opened")** — Gatekeeper quarantine.
-  Clear it once with `xattr -dr com.apple.quarantine bin/unrar`.
+  `-t /path/to/tool`. The matching bundled backend under `bin/<platform>/`
+  is used automatically.
+- **macOS blocks a bundled binary ("cannot be opened")** — Gatekeeper
+  quarantine. Clear it with `xattr -dr com.apple.quarantine bin/macos-arm64/unrar`
+  (or the downloaded `.app`).
 - **Password with non-ASCII / odd bytes** — wordlists are read with
   `surrogateescape`, so arbitrary byte passwords round-trip correctly on
   Linux/macOS.
