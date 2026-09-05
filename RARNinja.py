@@ -19,10 +19,14 @@ dependency-free and Good Enough for dictionary attacks.
 """
 
 import argparse
+import datetime
+import itertools
+import json
 import multiprocessing as mp
 import os
 import platform
 import shutil
+import string
 import subprocess
 import sys
 import time
@@ -136,14 +140,105 @@ def _try(password):
 # Wordlist streaming
 # ---------------------------------------------------------------------------
 
-def candidates(path):
-    # surrogateescape round-trips arbitrary bytes back through exec() on POSIX,
-    # so non-UTF-8 passwords survive intact.
-    with open(path, "r", encoding="utf-8", errors="surrogateescape") as fh:
-        for line in fh:
-            pw = line.rstrip("\r\n")
+def candidates(source):
+    """Yield password candidates from a file path OR any iterable of strings."""
+    if isinstance(source, (str, bytes, os.PathLike)):
+        # surrogateescape round-trips arbitrary bytes back through exec() on
+        # POSIX, so non-UTF-8 passwords survive intact.
+        with open(source, "r", encoding="utf-8", errors="surrogateescape") as fh:
+            for line in fh:
+                pw = line.rstrip("\r\n")
+                if pw:
+                    yield pw
+    else:
+        for pw in source:
             if pw:
                 yield pw
+
+
+# ---------------------------------------------------------------------------
+# Built-in dictionary generator (brute force over a character set)
+# ---------------------------------------------------------------------------
+
+CHARSETS = {
+    "digits":         string.digits,                                  # 0-9
+    "lower":          string.ascii_lowercase,                         # a-z
+    "lower+digits":   string.ascii_lowercase + string.digits,         # a-z 0-9
+    "alnum":          string.ascii_letters + string.digits,           # a-z A-Z 0-9
+    "alnum+symbols":  string.ascii_letters + string.digits + "!@#$%^&*()-_=+",
+}
+CHARSET_LABELS = {
+    "digits":        "Digits only (0-9)",
+    "lower":         "Lowercase (a-z)",
+    "lower+digits":  "Lowercase + digits",
+    "alnum":         "Letters + digits",
+    "alnum+symbols": "Letters + digits + symbols",
+}
+
+
+def gen_count(charset_key, min_len, max_len):
+    """Total number of candidates a generator run would produce."""
+    n = len(CHARSETS[charset_key])
+    return sum(n ** L for L in range(min_len, max_len + 1))
+
+
+def gen_candidates(charset_key, min_len, max_len):
+    """Yield every string over the charset from min_len..max_len (shortest first)."""
+    chars = CHARSETS[charset_key]
+    for length in range(min_len, max_len + 1):
+        for combo in itertools.product(chars, repeat=length):
+            yield "".join(combo)
+
+
+def gen_to_file(path, charset_key, min_len, max_len):
+    """Write a generated dictionary to disk (streamed). Returns the count."""
+    n = 0
+    with open(path, "w", encoding="utf-8") as fh:
+        for pw in gen_candidates(charset_key, min_len, max_len):
+            fh.write(pw + "\n")
+            n += 1
+    return n
+
+
+# ---------------------------------------------------------------------------
+# Found-password history
+# ---------------------------------------------------------------------------
+
+def history_path():
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support/RARNinja")
+    elif os.name == "nt":
+        base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "RARNinja")
+    else:
+        base = os.path.join(os.environ.get("XDG_DATA_HOME",
+                            os.path.expanduser("~/.local/share")), "RARNinja")
+    return os.path.join(base, "history.jsonl")
+
+
+def history_add(archive, password):
+    path = history_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    rec = {"when": datetime.datetime.now().isoformat(timespec="seconds"),
+           "archive": os.path.abspath(archive), "password": password}
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return rec
+
+
+def history_list():
+    path = history_path()
+    if not os.path.isfile(path):
+        return []
+    out = []
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +302,17 @@ def parse_args(argv):
     p.add_argument("--no-extract", action="store_true",
                    help="report the password but do not extract")
     p.add_argument("-q", "--quiet", action="store_true", help="no progress line")
+    # Built-in generator (use instead of a wordlist file)
+    p.add_argument("--generate", action="store_true",
+                   help="brute-force generate candidates instead of using a wordlist")
+    p.add_argument("--charset", choices=list(CHARSETS), default="digits",
+                   help="generator character set (default: digits)")
+    p.add_argument("--min-len", type=int, default=1, help="generator min length (default 1)")
+    p.add_argument("--max-len", type=int, default=4, help="generator max length (default 4)")
+    p.add_argument("--save-wordlist", metavar="FILE",
+                   help="also write generated candidates to this file")
+    p.add_argument("--history", action="store_true",
+                   help="print the found-password history and exit")
     return p.parse_args(argv)
 
 
@@ -222,6 +328,14 @@ def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     print(BANNER)
 
+    if args.history:
+        rows = history_list()
+        if not rows:
+            print("\nNo history yet.")
+        for r in rows:
+            print(f"  {r.get('when','?')}  {r.get('password','')}  <- {r.get('archive','')}")
+        return 0
+
     tool, family = detect_backend(args.tool)
     if not tool:
         print(_c("\nNo RAR backend found.", "31"))
@@ -230,18 +344,32 @@ def main(argv=None):
     print(f"\nBackend: {tool}  ({family})   Workers: {args.workers}")
 
     rar = args.rar or None
-    wordlist = args.wordlist or None
     if rar and not os.path.isfile(rar):
         print(_c(f"RAR not found: {rar}", "31")); rar = None
-    if wordlist and not os.path.isfile(wordlist):
-        print(_c(f"Wordlist not found: {wordlist}", "31")); wordlist = None
     if not rar:
         rar = prompt_path("\nEnter RAR file path: ")
-    if not wordlist:
-        wordlist = prompt_path("Enter dictionary file path: ")
+
+    # Candidate source: generator or wordlist file.
+    if args.generate:
+        total = gen_count(args.charset, args.min_len, args.max_len)
+        print(f"\nGenerating: {CHARSET_LABELS[args.charset]}, "
+              f"len {args.min_len}-{args.max_len}  ->  {total:,} candidates")
+        if args.save_wordlist:
+            print(f"Writing candidates to {args.save_wordlist} ...")
+            gen_to_file(args.save_wordlist, args.charset, args.min_len, args.max_len)
+            source = args.save_wordlist
+        else:
+            source = gen_candidates(args.charset, args.min_len, args.max_len)
+    else:
+        wordlist = args.wordlist or None
+        if wordlist and not os.path.isfile(wordlist):
+            print(_c(f"Wordlist not found: {wordlist}", "31")); wordlist = None
+        if not wordlist:
+            wordlist = prompt_path("Enter dictionary file path: ")
+        source = wordlist
 
     print("\nWorking...")
-    hit, tried, elapsed = crack(rar, wordlist, tool, family,
+    hit, tried, elapsed = crack(rar, source, tool, family,
                                 max(1, args.workers), progress=not args.quiet)
 
     rate = tried / elapsed if elapsed > 0 else 0
@@ -250,8 +378,9 @@ def main(argv=None):
                  f"(~{rate:,.0f}/sec). Password not found.", "31"))
         return 1
 
+    history_add(rar, hit)
     print(_c(f"\n  PASSWORD FOUND: {hit}", "32"))
-    print(f"  {tried:,} tries in {elapsed:.2f}s  (~{rate:,.0f}/sec)")
+    print(f"  {tried:,} tries in {elapsed:.2f}s  (~{rate:,.0f}/sec)   (saved to history)")
 
     if not args.no_extract:
         dest = os.path.abspath(args.extract_dir)
