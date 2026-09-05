@@ -1,66 +1,265 @@
-# RARNinja: RAR Password Cracking Utility
+<div align="center">
 
-A fast, multi-core dictionary attack against a password-protected RAR file.
-This fork is rewritten to run **natively on macOS (Apple Silicon)** and Linux,
-with a real process pool that uses every CPU core and stops the instant the
-password is found.
+# 🥷 RARNinja
 
-## What changed in this fork
-- **Native backend, no Windows binary.** The original hardcoded `UnRAR.exe`
-  (a Windows executable). This version auto-detects a RAR backend and prefers
-  the arm64 `unrar` shipped in [`bin/`](bin) (RARLAB unrar 7.12). `7zz`/`7z` on
-  PATH also work.
-- **Real parallelism with early-stop.** A `multiprocessing` pool sized to all
-  cores; a shared event halts every worker the moment one succeeds. The old
-  "multithreaded" script kept grinding all 8 threads after a hit.
-- **Tests, don't extract.** Each candidate is checked with `unrar t` (no disk
-  writes). Only the winning password triggers an actual extraction.
-- **Streams the wordlist** instead of loading it entirely into RAM.
-- **Zero pip dependencies** — standard library only.
+### Fast, multi-core RAR password recovery — native on Apple Silicon
+
+A dependency-free dictionary attack that saturates every CPU core and stops the
+instant it finds the password.
+
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?logo=python&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![Backend](https://img.shields.io/badge/backend-unrar%20%7C%207z-orange)
+![Arch](https://img.shields.io/badge/Apple%20Silicon-arm64-000000?logo=apple&logoColor=white)
+
+</div>
+
+---
+
+```
+   ██▀███   ▄▄▄       ██▀███   ███▄    █  ██▓ ███▄    █  ▄▄▄██▀▀▀▄▄▄
+  ▓██ ▒ ██▒▒████▄    ▓██ ▒ ██▒ ██ ▀█   █ ▓██▒ ██ ▀█   █    ▒██  ▒████▄
+  ▓██ ░▄█ ▒▒██  ▀█▄  ▓██ ░▄█ ▒▓██  ▀█ ██▒▒██▒▓██  ▀█ ██▒   ░██  ▒██  ▀█▄
+  ▒██▀▀█▄  ░██▄▄▄▄██ ▒██▀▀█▄  ▓██▒  ▐▌██▒░██░▓██▒  ▐▌██▒▓██▄██▓ ░██▄▄▄▄██
+  ░██▓ ▒██▒ ▓█   ▓██▒░██▓ ▒██▒▒██░   ▓██░░██░▒██░   ▓██░ ▓███▒   ▓█   ▓██▒
+  ░ ▒▓ ░▒▓░ ▒▒   ▓▒█░░ ▒▓ ░▒▓░░ ▒░   ▒ ▒ ░▓  ░ ▒░   ▒ ▒  ▒▓▒▒░   ▒▒   ▓▒█░
+             || RARNinja: The RAR Password Cracking Utility ||
+```
+
+## Table of Contents
+
+- [Why this fork](#why-this-fork)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Options](#options)
+- [Examples](#examples)
+- [Performance](#performance)
+- [Compiled binary](#compiled-binary-macos-arm64)
+- [Testing](#testing)
+- [Project structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Responsible use](#responsible-use)
+- [Credits](#credits)
+
+## Why this fork
+
+The upstream project only ran on Windows — it hardcoded `UnRAR.exe` — and its
+"multithreaded" mode never stopped its worker threads once a password was found.
+This fork is a ground-up rewrite focused on **running natively on macOS (Apple
+Silicon)** and using the machine to its full potential.
+
+| | Upstream | This fork |
+|---|---|---|
+| Backend | `UnRAR.exe` (Windows only) | Auto-detected native `unrar` / `7zz` / `7z` |
+| Parallelism | 8 fixed threads, **no early stop** | Process pool across **all cores** + shared early-stop |
+| Per guess | Extracts the whole archive | Tests only (no disk writes) until the hit |
+| Wordlist | Loaded fully into RAM | Streamed line by line |
+| Dependencies | `rarfile`, `colorama`, `termcolor` | **None** (standard library) |
+| Interface | Interactive prompts only | CLI **and** interactive |
+| Distribution | Scripts | Optional self-contained arm64 binary |
+
+## Features
+
+- ⚡ **All-core process pool** — one worker per logical CPU by default.
+- 🛑 **Instant early-stop** — a shared event halts every worker the moment one succeeds.
+- 🔍 **Test, don't extract** — each candidate is verified with `unrar t`; only the winning password triggers a real extraction.
+- 🧱 **Backend auto-detection** — prefers the bundled arm64 `unrar`, then `unrar`, `7zz`, or `7z` on your `PATH`.
+- 🪶 **Zero dependencies** — pure Python standard library.
+- 📦 **Streamed wordlist** — constant memory, even for multi-GB dictionaries.
+- 🧪 **Tested** — ships with a self-check suite and an encrypted fixture.
+- 🛠️ **Compilable** — build a single optimized arm64 executable that needs no Python.
+
+## How it works
+
+Instead of the upstream "chunk the list into 8 pieces" trick, RARNinja feeds the
+wordlist to a pool of worker processes. Each worker spawns the RAR backend in
+*test* mode (which decrypts and CRC-checks without writing files). The first
+worker to get exit code `0` sets a shared flag; the pool is torn down and only
+then is the archive actually extracted.
+
+```mermaid
+flowchart LR
+    A[wordlist.txt] -->|stream lines| B{Process Pool<br/>N = all cores}
+    B --> W1[worker → unrar t]
+    B --> W2[worker → unrar t]
+    B --> W3[worker → unrar t]
+    B --> Wn[worker → unrar t]
+    W1 & W2 & W3 & Wn -->|exit 0?| C{{shared found event}}
+    C -->|set on first hit| D[terminate pool]
+    D --> E[extract with password → ./Extracted]
+```
+
+## Requirements
+
+- **Python 3.8+** (uses only the standard library), *or* the [compiled binary](#compiled-binary-macos-arm64) which needs nothing.
+- A **RAR backend**. This repo bundles RARLAB `unrar` 7.12 for Apple Silicon in
+  [`bin/`](bin), so on an M-series Mac you need nothing else. On other systems,
+  install any of `unrar`, `7zz`, or `7z`.
+
+## Installation
+
+```bash
+git clone https://github.com/G3nnius/crack-rar-password.git
+cd crack-rar-password
+```
+
+Getting a backend on non-macOS-arm systems:
+
+```bash
+# macOS (Homebrew) — 7-Zip provides 7zz, which handles RAR5
+brew install sevenzip
+
+# Debian / Ubuntu
+sudo apt install unrar        # or: sudo apt install p7zip-full
+
+# Arch
+sudo pacman -S unrar
+```
 
 ## Usage
 
-Scriptable (recommended):
+**Scriptable** (recommended):
+
 ```bash
 python3 RARNinja.py <archive.rar> <wordlist.txt>
 ```
 
-Interactive (prompts for paths) — just run it with no arguments:
+**Interactive** — run with no arguments and it prompts for the paths:
+
 ```bash
 python3 RARNinja.py
 ```
 
-Options:
+On success the archive is extracted into `./Extracted/`.
+
+## Options
+
 ```
--w, --workers N     parallel workers (default: all cores)
--t, --tool PATH     force a specific backend (unrar / 7zz / 7z)
---extract-dir DIR   extraction target on success (default: ./Extracted)
---no-extract        report the password without extracting
--q, --quiet         suppress the live progress line
+positional:
+  rar                  path to the .rar file
+  wordlist             path to the dictionary file
+
+options:
+  -w, --workers N      parallel workers            (default: all CPU cores)
+  -t, --tool PATH      force a backend             (unrar / 7zz / 7z or a full path)
+  --extract-dir DIR    extraction target on success(default: ./Extracted)
+  --no-extract         report the password only, skip extraction
+  -q, --quiet          suppress the live progress line
+  -h, --help           show help
 ```
 
-On success the archive is extracted into `./Extracted/`.
+## Examples
+
+```bash
+# Full send: all cores, extract on success
+python3 RARNinja.py secret.rar rockyou.txt
+
+# Just find the password, don't extract, stay quiet (good for scripts)
+python3 RARNinja.py secret.rar rockyou.txt --no-extract -q
+
+# Pin to 4 workers and a specific backend
+python3 RARNinja.py secret.rar rockyou.txt -w 4 -t 7zz
+
+# Extract somewhere else
+python3 RARNinja.py secret.rar words.txt --extract-dir ~/loot
+```
+
+Sample run:
+
+```
+Backend: bin/unrar  (unrar)   Workers: 11
+Working...
+  PASSWORD FOUND: hunter2
+  1,842 tries in 5.87s  (~314/sec)
+  Extracted to: /path/to/Extracted
+```
+
+## Performance
+
+Each guess runs the backend's RAR5 key-derivation once, so throughput is bounded
+by the crypto, not by RARNinja. Measured on an 11-core Apple M-series
+(5 performance + 6 efficiency cores), worst case (full wordlist exhaustion):
+
+| Workers | Throughput | Speed-up |
+|--------:|-----------:|---------:|
+| 1       | ~58 tries/sec  | 1.0× |
+| 5       | ~238 tries/sec | 4.1× |
+| 11      | ~315 tries/sec | 5.4× |
+
+Scaling flattens past the performance-core count because RAR5's key-derivation
+is intentionally CPU-heavy.
+
+> [!TIP]
+> For very large wordlists, a GPU/CPU hash cracker is far faster. Extract the
+> hash with `rar2john your.rar > hash.txt` and run
+> [John the Ripper](https://www.openwall.com/john/) or
+> [hashcat](https://hashcat.net/hashcat/) (mode `13000` for RAR5). RARNinja
+> trades that peak speed for zero dependencies and a two-argument workflow.
 
 ## Compiled binary (macOS arm64)
 
-A standalone, optimized binary that needs no Python and bundles `unrar`:
+Build a single, optimized, self-contained executable that bundles `unrar` and
+needs no Python installed:
+
 ```bash
-./scripts/build.sh        # produces dist/rarninja
-./dist/rarninja <archive.rar> <wordlist.txt>
+./scripts/build.sh          # → dist/rarninja
+./dist/rarninja secret.rar rockyou.txt
 ```
 
-## Tests
+The script creates a throwaway virtualenv, installs PyInstaller, and produces a
+stripped, `--optimize 2` onefile arm64 build.
+
+## Testing
+
 ```bash
 python3 tests/test_rarninja.py
 ```
-Cracks the committed encrypted fixture (`tests/fixtures/locked.rar`) and checks
-the not-found and extraction paths.
 
-## Performance note
-Each guess runs the backend's RAR5 key-derivation once, so throughput is on the
-order of hundreds of tries/sec (about 315/sec across 11 cores on an M-series
-Mac). For orders-of-magnitude more speed on large wordlists, extract the hash
-with `rar2john` and run John the Ripper or hashcat.
+The suite cracks a committed, header-encrypted fixture
+(`tests/fixtures/locked.rar`, password `hunter2`) and verifies the not-found and
+extraction paths.
 
-------------
-Original project by SHUR1K-N: https://TheComputerNoob.com
+## Project structure
+
+```
+.
+├── RARNinja.py            # the tool (single file, stdlib only)
+├── bin/
+│   ├── unrar              # RARLAB unrar 7.12, arm64 (bundled backend)
+│   ├── rar                # RARLAB rar 7.12, arm64 (used to build fixtures)
+│   └── RARLAB-license.txt
+├── scripts/
+│   └── build.sh           # compile the standalone arm64 binary
+├── tests/
+│   ├── test_rarninja.py
+│   └── fixtures/          # locked.rar + words.txt
+├── requirements.txt       # (no runtime deps; pyinstaller optional for builds)
+└── README.md
+```
+
+## Troubleshooting
+
+- **"No RAR backend found."** Install `unrar`, `7zz`, or `7z`, or pass one with
+  `-t /path/to/tool`. On Apple Silicon the bundled `bin/unrar` is used
+  automatically.
+- **macOS blocks `bin/unrar` ("cannot be opened")** — Gatekeeper quarantine.
+  Clear it once with `xattr -dr com.apple.quarantine bin/unrar`.
+- **Password with non-ASCII / odd bytes** — wordlists are read with
+  `surrogateescape`, so arbitrary byte passwords round-trip correctly on
+  Linux/macOS.
+
+## Responsible use
+
+RARNinja is a password-**recovery** tool. Use it only on archives you own or are
+explicitly authorized to access. You are responsible for complying with the laws
+and terms that apply to you. Do not use it to access data without permission.
+
+## Credits
+
+- Original **RARNinja** by [SHUR1K-N](https://github.com/SHUR1K-N) — https://TheComputerNoob.com
+- Bundled `unrar` / `rar` © RARLAB (Alexander Roshal); see `bin/RARLAB-license.txt`.
+- Native rewrite, all-core engine, tests, and arm64 build in this fork.
